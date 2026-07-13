@@ -11,6 +11,9 @@
 
 use std::net::TcpStream;
 use std::time::Duration;
+use std::thread;
+use std::sync::mpsc::{self, Sender, Receiver};
+
 
 // Scans a single port on the given IP address and returns true if the port is open, false otherwise.
 fn scan_port(ip: &str, port: u16) -> bool {
@@ -21,14 +24,34 @@ fn scan_port(ip: &str, port: u16) -> bool {
     }
 }
 
+//spawn a thread for each port to scan concurrently & sync the results using channels
+fn scan_ports_concurrently(ip: &str, start_port: u16, end_port: u16) {
+    let (tx, rx): (Sender<(u16, bool)>, Receiver<(u16, bool)>) = mpsc::channel();
+
+    for port in start_port..=end_port {
+        let tx = tx.clone();
+        let ip = ip.to_string();
+        thread::spawn(move || {
+            let is_open = scan_port(&ip, port);
+            tx.send((port, is_open)).unwrap();
+        });
+    }
+
+    drop(tx); // Close the sending side of the channel
+
+    for (port, is_open) in rx {
+        if is_open {
+            println!("Port {} is open", port);
+        } else {
+            println!("Port {} is closed", port);
+        }
+    }
+}
+
 fn main() {
     // ip and port to scan
     let ip = "127.0.0.1";
-    let port = 80;
-    //function call to scan the port
-    if scan_port(ip, port) {
-        println!("Port {} is open", port);
-    } else {
-        println!("Port {} is closed", port);
-    }
+    let start_port = 1;
+    let end_port = 1024;
+    scan_ports_concurrently(ip, start_port, end_port);
 }
